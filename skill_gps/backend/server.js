@@ -12,56 +12,42 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:3001'], credentials: true }));
 app.use(express.json());
 
-// ===== GEMINI HELPER =====
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// gemini-2.0-flash is the current free available model (1.5-flash and 1.5-pro are deprecated)
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+// ===== GROQ HELPER =====
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 /**
- * Call Gemini 2.0 Flash API.
+ * Call Groq API.
  * @param {string} systemPrompt - Instruction for the model
  * @param {Array}  messages     - [{role:'user'|'assistant', content:'...'}]
  * @param {boolean} jsonMode    - Enable JSON output mode
  */
-async function callGemini(systemPrompt, messages, _unused = false, jsonMode = false) {
-    // Convert messages: Gemini uses 'model' not 'assistant'
-    const rawContents = messages.map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content || '' }]
-    }));
-
-    // Gemini requires strictly alternating user/model turns.
-    // Merge consecutive same-role messages into one.
-    const contents = [];
-    for (const turn of rawContents) {
-        if (contents.length > 0 && contents[contents.length - 1].role === turn.role) {
-            contents[contents.length - 1].parts[0].text += '\n' + turn.parts[0].text;
-        } else {
-            contents.push(turn);
-        }
-    }
-    // Must end with a user message
-    if (!contents.length || contents[contents.length - 1].role !== 'user') {
-        throw new Error('Last message must be from user');
-    }
+async function callGroq(systemPrompt, messages, _unused = false, jsonMode = false) {
+    const formattedMessages = [
+        { role: 'system', content: systemPrompt },
+        ...messages.map(m => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            content: m.content || ''
+        }))
+    ];
 
     const requestBody = {
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents,
-        generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048,
-            ...(jsonMode && { responseMimeType: 'application/json' })
-        }
+        model: 'llama3-8b-8192',
+        messages: formattedMessages,
+        temperature: 0.7,
+        max_tokens: 2048,
+        ...(jsonMode && { response_format: { type: 'json_object' } })
     };
 
-    const response = await axios.post(GEMINI_URL, requestBody, {
-        headers: { 'Content-Type': 'application/json' },
+    const response = await axios.post(GROQ_URL, requestBody, {
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${GROQ_API_KEY}`
+        },
         timeout: 60000
     });
 
-    const reply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return reply;
+    return response.data?.choices?.[0]?.message?.content || '';
 }
 
 // ===== DB HELPERS =====
@@ -168,14 +154,14 @@ app.delete('/api/students/:id', (req, res) => {
     res.json({ success: true });
 });
 
-// ===== AI CHAT ROUTE (Gemini Flash) =====
+// ===== AI CHAT ROUTE (Groq) =====
 app.post('/api/chat', async (req, res) => {
     const { messages, studentId, requestingStudentId, systemPrompt: customSystemPrompt } = req.body;
 
     // If a custom system prompt is provided (from non-chat routes), use it directly
     if (customSystemPrompt) {
         try {
-            const reply = await callGemini(customSystemPrompt, messages, false, false);
+            const reply = await callGroq(customSystemPrompt, messages, false, false);
             return res.json({ reply });
         } catch (error) {
             console.error('Gemini error (custom prompt):', error.message);
@@ -225,7 +211,7 @@ ${(student.semesterGoals || []).map(g => `- [${g.done ? '✓' : ' '}] ${g.text}`
 IMPORTANT PRIVACY RULE: If asked about another student's personal details, respond ONLY with: "⚠️ Cannot provide other users' personal info due to safety reasons."`;
 
     try {
-        const reply = await callGemini(systemPrompt, messages, false, false);
+        const reply = await callGroq(systemPrompt, messages, false, false);
         res.json({ reply });
     } catch (error) {
         console.error('Gemini chat error:', error.message);
@@ -240,7 +226,7 @@ IMPORTANT PRIVACY RULE: If asked about another student's personal details, respo
     }
 });
 
-// ===== APTITUDE TRAINER (Gemini Flash + JSON Mode) =====
+// ===== APTITUDE TRAINER (Groq + JSON Mode) =====
 app.post('/api/aptitude', async (req, res) => {
     const { topic, difficulty, score } = req.body;
 
@@ -261,7 +247,7 @@ Return a valid JSON object with EXACTLY this structure:
     const userMessage = `Generate a question for Topic: ${topic || 'Any'}, Difficulty: ${difficulty || 'Medium'}, Student Previous Score: ${score || 'N/A'}`;
 
     try {
-        const reply = await callGemini(systemPrompt, [{ role: 'user', content: userMessage }], false, true);
+        const reply = await callGroq(systemPrompt, [{ role: 'user', content: userMessage }], false, true);
         const parsed = JSON.parse(reply);
         res.json(parsed);
     } catch (error) {
@@ -271,7 +257,7 @@ Return a valid JSON object with EXACTLY this structure:
     }
 });
 
-// ===== CODING MENTOR (Gemini Pro + JSON Mode) =====
+// ===== CODING MENTOR (Groq + JSON Mode) =====
 app.post('/api/coding-mentor', async (req, res) => {
     const { code, language, question } = req.body;
 
@@ -292,7 +278,7 @@ Return a valid JSON object with EXACTLY this structure:
         : `Language: ${language || 'Unknown'}\nCode:\n${code}`;
 
     try {
-        const reply = await callGemini(systemPrompt, [{ role: 'user', content: userMessage }], true, true);
+        const reply = await callGroq(systemPrompt, [{ role: 'user', content: userMessage }], true, true);
         const parsed = JSON.parse(reply);
         res.json(parsed);
     } catch (error) {
@@ -301,7 +287,7 @@ Return a valid JSON object with EXACTLY this structure:
     }
 });
 
-// ===== RESUME OPTIMIZER (Gemini Pro + JSON Mode) =====
+// ===== RESUME OPTIMIZER (Groq + JSON Mode) =====
 app.post('/api/resume-optimizer', async (req, res) => {
     const { resumeText, targetRole } = req.body;
 
@@ -326,7 +312,7 @@ Return a valid JSON object with EXACTLY this structure:
     const userMessage = `Analyze this resume for the role of ${targetRole || 'Software Engineer'}:\n\n${resumeText}`;
 
     try {
-        const reply = await callGemini(systemPrompt, [{ role: 'user', content: userMessage }], true, true);
+        const reply = await callGroq(systemPrompt, [{ role: 'user', content: userMessage }], true, true);
         const parsed = JSON.parse(reply);
         res.json(parsed);
     } catch (error) {
@@ -335,7 +321,7 @@ Return a valid JSON object with EXACTLY this structure:
     }
 });
 
-// ===== CAREER ROADMAP (Gemini Flash + JSON Mode) =====
+// ===== CAREER ROADMAP (Groq + JSON Mode) =====
 app.post('/api/career-roadmap', async (req, res) => {
     const { currentSkills, targetRole, studentId } = req.body;
 
@@ -357,7 +343,7 @@ Return a valid JSON object with EXACTLY this structure:
     const userMessage = `Current Skills: ${currentSkills}. Target Role: ${targetRole}.`;
 
     try {
-        const reply = await callGemini(systemPrompt, [{ role: 'user', content: userMessage }], false, true);
+        const reply = await callGroq(systemPrompt, [{ role: 'user', content: userMessage }], false, true);
         const parsed = JSON.parse(reply);
         res.json(parsed);
     } catch (error) {
@@ -366,7 +352,7 @@ Return a valid JSON object with EXACTLY this structure:
     }
 });
 
-// ===== COMMUNICATION TRAINER (Gemini Flash + JSON Mode) =====
+// ===== COMMUNICATION TRAINER (Groq + JSON Mode) =====
 app.post('/api/communication-trainer', async (req, res) => {
     const { sentence } = req.body;
     if (!sentence || sentence.trim() === '') {
@@ -390,7 +376,7 @@ Return a valid JSON object with EXACTLY this structure:
 }`;
 
     try {
-        const reply = await callGemini(systemPrompt, [{ role: 'user', content: `Input Sentence: "${sentence}"` }], false, true);
+        const reply = await callGroq(systemPrompt, [{ role: 'user', content: `Input Sentence: "${sentence}"` }], false, true);
         const parsed = JSON.parse(reply);
         res.json(parsed);
     } catch (error) {
@@ -399,7 +385,7 @@ Return a valid JSON object with EXACTLY this structure:
     }
 });
 
-// ===== MENTOR GUIDE (Gemini Flash) =====
+// ===== MENTOR GUIDE (Groq) =====
 app.post('/api/mentor-guide', async (req, res) => {
     const { studentProfile, question } = req.body;
 
@@ -408,7 +394,7 @@ app.post('/api/mentor-guide', async (req, res) => {
     const userMessage = `Student Profile: ${JSON.stringify(studentProfile || {})}. Question: ${question}`;
 
     try {
-        const reply = await callGemini(systemPrompt, [{ role: 'user', content: userMessage }], false, false);
+        const reply = await callGroq(systemPrompt, [{ role: 'user', content: userMessage }], false, false);
         res.json({ reply });
     } catch (error) {
         console.error('Mentor guide error:', error.message);
@@ -416,7 +402,7 @@ app.post('/api/mentor-guide', async (req, res) => {
     }
 });
 
-// ===== INSIGHTS (Gemini Flash + JSON Mode) =====
+// ===== INSIGHTS (Groq + JSON Mode) =====
 app.post('/api/insights', async (req, res) => {
     const { studentId } = req.body;
     const students = readStudents();
@@ -439,7 +425,7 @@ Return a valid JSON object with EXACTLY this structure:
     const userMessage = `Student Data: ${JSON.stringify(student)}`;
 
     try {
-        const reply = await callGemini(systemPrompt, [{ role: 'user', content: userMessage }], false, true);
+        const reply = await callGroq(systemPrompt, [{ role: 'user', content: userMessage }], false, true);
         const parsed = JSON.parse(reply);
         res.json(parsed);
     } catch (error) {
@@ -453,16 +439,15 @@ app.get('/api/health', (req, res) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        ai: 'Google Gemini',
-        model_chat: 'gemini-1.5-flash',
-        model_pro: 'gemini-1.5-pro',
-        gemini_key_set: !!GEMINI_API_KEY
+        ai: 'Groq',
+        model: 'llama3-8b-8192',
+        groq_key_set: !!process.env.GROQ_API_KEY
     });
 });
 
 app.listen(PORT, () => {
     console.log(`✅ Skill GPS Backend running on http://localhost:${PORT}`);
     console.log(`📦 Student DB: ${DB_PATH}`);
-    console.log(`🤖 AI Provider: Google Gemini`);
-    console.log(`🔑 Gemini API Key: ${GEMINI_API_KEY ? 'SET ✅' : 'NOT SET ❌'}`);
+    console.log(`🤖 AI Provider: Groq`);
+    console.log(`🔑 Groq API Key: ${process.env.GROQ_API_KEY ? 'SET ✅' : 'NOT SET ❌'}`);
 });

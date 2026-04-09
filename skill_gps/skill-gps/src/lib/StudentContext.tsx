@@ -1,8 +1,9 @@
 "use client";
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import type { Student } from "@/lib/students";
+import { BACKEND_URL } from "@/lib/api-client";
 
-// Blank student shape used as a safe initial value while Firebase loads
+// Blank student shape used as a safe initial value while data loads
 const BLANK_STUDENT: Student = {
     id: "", name: "Loading...", email: "", regNo: "", college: "", department: "",
     year: 1, semester: 1, section: "A", cgpa: 0,
@@ -29,70 +30,78 @@ export function StudentProvider({ children }: { children: ReactNode }) {
     const [student, setStudent] = useState<Student>(BLANK_STUDENT);
     const [isLoading, setIsLoading] = useState(true);
 
+    const fetchFromNode = async (id: string) => {
+        try {
+            const res = await fetch(`${BACKEND_URL}/students/${id}`);
+            if (res.ok) {
+                const data = await res.json();
+                setStudent(data);
+                setStudents(prev => {
+                    const exists = prev.find(s => s.id === data.id);
+                    if (exists) return prev.map(s => s.id === data.id ? data : s);
+                    return [...prev, data];
+                });
+                return true;
+            }
+        } catch (e) {
+            console.error("Backend fetch error:", e);
+        }
+        return false;
+    };
+
     useEffect(() => {
         let unsubscribeAuth: () => void = () => {};
         let unsubscribeDB: () => void = () => {};
 
         const init = async () => {
-            const { collection, doc, onSnapshot } = await import("firebase/firestore");
-            const { onAuthStateChanged } = await import("firebase/auth");
-            const { db, auth } = await import("@/lib/firebase");
+            const savedId = localStorage.getItem("skillgps_student_id") || "STU001";
+            const nodeSuccess = await fetchFromNode(savedId);
+            
+            if (nodeSuccess) {
+                setIsLoading(false);
+                // Even if node succeeded, we can still listen to auth in background if needed
+            }
 
-            // Listen for auth state — get the currently signed-in user
-            unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-                if (!user) {
-                    // No authenticated user — check localStorage fallback
-                    const savedId = localStorage.getItem("skillgps_student_id");
-                    if (savedId) {
-                        // Fetch just that one document
-                        const studentRef = doc(db, "students", savedId);
-                        unsubscribeDB = onSnapshot(studentRef, (snap) => {
-                            if (snap.exists()) {
-                                const data = { ...(snap.data() as Student), id: snap.id };
-                                setStudent(data);
-                                setStudents([data]);
-                            }
-                            setIsLoading(false);
-                        }, () => setIsLoading(false));
-                    } else {
-                        setIsLoading(false);
-                    }
-                    return;
-                }
+            try {
+                const { collection, doc, onSnapshot } = await import("firebase/firestore");
+                const { onAuthStateChanged } = await import("firebase/auth");
+                const { db, auth } = await import("@/lib/firebase");
 
-                // User is authenticated — fetch their document with their UID
-                const studentRef = doc(db, "students", user.uid);
-                unsubscribeDB = onSnapshot(studentRef, (snap) => {
-                    if (snap.exists()) {
-                        const data = { ...(snap.data() as Student), id: snap.id };
-                        setStudent(data);
-                        setStudents(prev => {
-                            const exists = prev.find(s => s.id === data.id);
-                            if (exists) return prev.map(s => s.id === data.id ? data : s);
-                            return [...prev, data];
-                        });
-                        localStorage.setItem("skillgps_student_id", user.uid);
-                    } else {
-                        // UID doc not found — try email-based match in collection
-                        const studentsCol = collection(db, "students");
-                        onSnapshot(studentsCol, (colSnap) => {
-                            const all = colSnap.docs.map(d => ({ ...(d.data() as Student), id: d.id }));
-                            setStudents(all);
-                            const found = all.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
-                            if (found) {
-                                setStudent(found);
-                                localStorage.setItem("skillgps_student_id", found.id);
-                            }
-                            setIsLoading(false);
-                        });
+                unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+                    if (!user) {
+                        if (!nodeSuccess) setIsLoading(false);
                         return;
                     }
-                    setIsLoading(false);
-                }, () => setIsLoading(false));
-            });
+
+                    // Firebase user exists
+                    const studentRef = doc(db, "students", user.uid);
+                    unsubscribeDB = onSnapshot(studentRef, (snap) => {
+                        if (snap.exists()) {
+                            const data = { ...(snap.data() as Student), id: snap.id };
+                            setStudent(data);
+                            localStorage.setItem("skillgps_student_id", user.uid);
+                        } else if (!nodeSuccess) {
+                            // Only fall back to email search if node also failed
+                            const studentsCol = collection(db, "students");
+                            onSnapshot(studentsCol, (colSnap) => {
+                                const all = colSnap.docs.map(d => ({ ...(d.data() as Student), id: d.id }));
+                                const found = all.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
+                                if (found) {
+                                    setStudent(found);
+                                    localStorage.setItem("skillgps_student_id", found.id);
+                                }
+                            });
+                        }
+                        setIsLoading(false);
+                    }, () => { if (!nodeSuccess) setIsLoading(false); });
+                });
+            } catch (fireErr) {
+                console.warn("Firebase not configured or reachable.");
+                if (!nodeSuccess) setIsLoading(false);
+            }
         };
 
-        init().catch(() => setIsLoading(false));
+        init();
 
         return () => {
             unsubscribeAuth();
@@ -100,11 +109,16 @@ export function StudentProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
-    const setStudentById = (id: string) => {
-        const found = students.find(s => s.id === id);
-        if (found) {
-            setStudent(found);
+    const setStudentById = async (id: string) => {
+        const success = await fetchFromNode(id);
+        if (success) {
             localStorage.setItem("skillgps_student_id", id);
+        } else {
+            const found = students.find(s => s.id === id);
+            if (found) {
+                setStudent(found);
+                localStorage.setItem("skillgps_student_id", id);
+            }
         }
     };
 
