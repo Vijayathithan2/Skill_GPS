@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import { callGroq } from '@/lib/gemini';
 
-const SYSTEM_PROMPT = `You are an AI Career Roadmap Generator. Create a personalized step-by-step learning roadmap.
+const SYSTEM_PROMPT = `You are an AI Career Roadmap Generator that tracks actual progress.
+Generate a personalized step-by-step learning roadmap.
+
+CRITICAL INSTRUCTION:
+Look at the user's "Verified Certificates". 
+If a node's required skills/topics match ANY of their verified certificates, mark that node as "completed".
+The FIRST node that is not "completed" must be marked "active". All remaining nodes after it must be marked "locked".
 
 Return a valid JSON object with EXACTLY this structure (no extra text, no markdown):
 {
@@ -19,9 +25,13 @@ Return a valid JSON object with EXACTLY this structure (no extra text, no markdo
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { currentSkills, targetRole } = body;
+        const { currentSkills, targetRole, certificates } = body;
+        
+        const certsStr = certificates && certificates.length > 0 
+            ? certificates.map((c: any) => c.title).join(", ") 
+            : "None";
 
-        const userMessage = `Generate a career roadmap for someone with skills: "${currentSkills || 'beginner'}" targeting the role: "${targetRole || 'Software Engineer'}".`;
+        const userMessage = `Target Role: "${targetRole || 'Software Engineer'}". Current Skills: "${currentSkills || 'beginner'}". Verified Certificates: "${certsStr}". Generate roadmap and track completion!`;
 
         const reply = await callGroq(SYSTEM_PROMPT, [{ role: 'user', content: userMessage }], true);
         const parsed = JSON.parse(reply);

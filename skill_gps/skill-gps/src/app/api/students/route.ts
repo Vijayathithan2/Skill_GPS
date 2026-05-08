@@ -1,31 +1,20 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { BACKEND_URL } from '@/lib/api-client';
 
 // GET /api/students?college=...
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
-        const collegeParam = searchParams.get('college');
+        const college = searchParams.get('college');
 
-        const studentsRef = collection(db, 'students');
-        const querySnapshot = await getDocs(studentsRef);
-        let students = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        })) as any[];
-        
-        if (collegeParam && collegeParam.toLowerCase() !== 'admin') {
-            const searchCol = collegeParam.trim().toLowerCase();
-            students = students.filter(s => 
-                s.college && s.college.trim().toLowerCase() === searchCol
-            );
-        }
+        const res = await fetch(`${BACKEND_URL}/students?college=${encodeURIComponent(college || '')}`);
+        if (!res.ok) throw new Error("Backend unreachable");
+        const students = await res.json();
 
         return NextResponse.json(students);
     } catch (err: any) {
-        console.error("Fetch students error:", err);
-        return NextResponse.json({ error: 'Failed to fetch students', details: err.message }, { status: 500 });
+        console.error("Fetch students proxy error:", err);
+        return NextResponse.json({ error: 'Failed to fetch students from backend' }, { status: 500 });
     }
 }
 
@@ -33,29 +22,18 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const baseStudent = {
-            ...body,
-            careerProbability: body.careerProbability || 50,
-            joinedDate: new Date().toISOString().split('T')[0],
-            attendance: body.attendance || 80,
-            leetcodeRank: body.leetcodeRank || 5000,
-            leetcodeStreak: 0,
-            skillrackStreak: 0,
-            githubStreak: 0,
-            totalXP: 100,
-            level: 1,
-            badges: [],
-            skillGaps: body.skillGaps || [],
-            semesterGoals: body.semesterGoals || [],
-            recentActivity: [],
-            createdAt: serverTimestamp(),
-        };
-
-        const docRef = await addDoc(collection(db, 'students'), baseStudent);
+        const res = await fetch(`${BACKEND_URL}/students`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
         
-        return NextResponse.json({ id: docRef.id, ...baseStudent }, { status: 201 });
+        if (!res.ok) throw new Error("Backend failed to save student");
+        const newStudent = await res.json();
+        
+        return NextResponse.json(newStudent, { status: 201 });
     } catch (err: any) {
-        console.error("Add student error:", err);
-        return NextResponse.json({ error: 'Failed to add student', details: err.message }, { status: 500 });
+        console.error("Add student proxy error:", err);
+        return NextResponse.json({ error: 'Failed to add student to backend' }, { status: 500 });
     }
 }

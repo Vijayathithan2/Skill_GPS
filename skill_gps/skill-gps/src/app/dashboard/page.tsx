@@ -18,6 +18,8 @@ export default function DashboardHome() {
     const [insightsLoading, setInsightsLoading] = useState(true);
     const [platformStats, setPlatformStats] = useState<any>(null);
     const [syncing, setSyncing] = useState(false);
+    const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+    const [analysisLoading, setAnalysisLoading] = useState(true);
 
     // Editable Semester Goals loaded from student data
     const [semesterTasks, setSemesterTasks] = useState(student.semesterGoals);
@@ -73,8 +75,26 @@ export default function DashboardHome() {
                 setInsightsLoading(false);
             }
         };
+
+        const fetchAIAnalysis = async () => {
+            if (!student.id) return;
+            setAnalysisLoading(true);
+            try {
+                const res = await fetch(`/api/insights/${student.id}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setAiAnalysis(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch AI analysis", error);
+            } finally {
+                setAnalysisLoading(false);
+            }
+        };
+
         fetchInsights();
-    }, [student.careerTarget]);
+        fetchAIAnalysis();
+    }, [student.careerTarget, student.id]);
 
     return (
         <div style={{ maxWidth: 1000, margin: "0 auto", animation: "fadeIn 0.5s ease", paddingBottom: "100px" }}>
@@ -201,6 +221,23 @@ export default function DashboardHome() {
                         </div>
                     </div>
                 </div>
+            </div>
+            {/* RESUME CTA BANNER */}
+            <div style={{ background: "linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(168, 85, 247, 0.15))", border: "1px dotted rgba(59, 130, 246, 0.4)", padding: "24px 32px", borderRadius: 24, marginBottom: 40, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+                    <div style={{ width: 56, height: 56, borderRadius: 16, background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--border-color)" }}>
+                        <FileText size={28} color="#3B82F6" />
+                    </div>
+                    <div>
+                        <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>Your Professional Resume is Ready</h3>
+                        <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-secondary)" }}>We've compiled your {student.githubStreak}-day streak and {student.cgpa} GPA into an ATS-friendly format.</p>
+                    </div>
+                </div>
+                <Link href="/dashboard/resume">
+                    <button className="btn-primary" style={{ padding: "12px 28px", borderRadius: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 10 }}>
+                        Preview Resume <ChevronRight size={18} />
+                    </button>
+                </Link>
             </div>
 
             {/* ===== PLATFORM CONSISTENCY & WORK AREAS ===== */}
@@ -422,6 +459,72 @@ export default function DashboardHome() {
                         ))}
                     </div>
                 </div>
+            </div>
+
+            {/* AI ANALYSIS MODULE */}
+            <div style={{ marginBottom: 48 }}>
+                <h3 style={{ fontFamily: "var(--font-serif)", fontSize: "1.4rem", fontWeight: 400, marginBottom: 20, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 10 }}>
+                    <Sparkles size={24} color="#3B82F6" /> AI Trajectory Analysis
+                </h3>
+                
+                {analysisLoading ? (
+                    <div className="glass-card" style={{ padding: "40px", textAlign: "center", background: "rgba(59, 130, 246, 0.05)" }}>
+                        <Loader2 size={24} className="animate-spin" style={{ margin: "0 auto 12px", color: "#3B82F6" }} />
+                        <div style={{ color: "var(--text-secondary)", fontSize: "0.95rem" }}>AI is analyzing your growth trajectory...</div>
+                    </div>
+                ) : aiAnalysis ? (
+                    <div className="glass-card" style={{ padding: "32px", border: "1px solid rgba(59, 130, 246, 0.2)", position: "relative", overflow: "hidden" }}>
+                        <div style={{ position: "absolute", top: -20, right: -20, width: 140, height: 140, background: "rgba(59, 130, 246, 0.1)", filter: "blur(40px)", borderRadius: "50%" }}></div>
+                        
+                        <div style={{ marginBottom: 24 }}>
+                            <p style={{ fontSize: "1.1rem", color: "var(--text-primary)", lineHeight: 1.6, fontWeight: 500 }}>&ldquo;{aiAnalysis.summary}&rdquo;</p>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 24, marginBottom: 32 }}>
+                            <div>
+                                <div style={{ fontSize: "0.8rem", color: "#39d353", fontWeight: 700, textTransform: "uppercase", marginBottom: 12 }}>Key Strengths</div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                    {aiAnalysis.strengths.map((s: string, i: number) => (
+                                        <div key={i} style={{ fontSize: "0.9rem", color: "var(--text-secondary)", display: "flex", gap: 8 }}>
+                                            <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#39d353", marginTop: 8 }}></div>
+                                            {s}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: "0.8rem", color: "#ef4444", fontWeight: 700, textTransform: "uppercase", marginBottom: 12 }}>Growth Areas</div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                    {aiAnalysis.weaknesses.map((w: string, i: number) => (
+                                        <div key={i} style={{ fontSize: "0.9rem", color: "var(--text-secondary)", display: "flex", gap: 8 }}>
+                                            <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#ef4444", marginTop: 8 }}></div>
+                                            {w}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div style={{ background: "rgba(255, 215, 0, 0.05)", padding: "16px", borderRadius: 12, border: "1px solid rgba(255, 215, 0, 0.1)" }}>
+                                <div style={{ fontSize: "0.8rem", color: "#FFD700", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Weekly Goal</div>
+                                <div style={{ fontSize: "0.95rem", color: "var(--text-primary)", fontWeight: 500 }}>{aiAnalysis.weeklyGoal}</div>
+                            </div>
+                        </div>
+
+                        <div style={{ padding: "16px 20px", background: "var(--bg-tertiary)", borderRadius: 12, border: "1px solid var(--border-color)" }}>
+                            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 12, fontWeight: 600 }}>PRIORITY ACTION ITEMS</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                                {aiAnalysis.actionItems.map((item: any, i: number) => (
+                                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                        <div style={{ fontSize: "0.9rem", color: "var(--text-primary)" }}>
+                                            <span style={{ color: item.priority === "High" ? "#ef4444" : "#3B82F6", fontWeight: 700, marginRight: 8 }}>[{item.priority}]</span>
+                                            {item.action}
+                                        </div>
+                                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontStyle: "italic" }}>Impact: {item.impact}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
             </div>
 
             {/* ===== EXPLORE PLATFORM ===== */}

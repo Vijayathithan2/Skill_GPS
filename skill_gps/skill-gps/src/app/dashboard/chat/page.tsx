@@ -10,7 +10,7 @@ export default function ChatPage() {
     const [messages, setMessages] = useState<Message[]>([
         {
             id: 1,
-            text: `Hello ${student.name.split(" ")[0]}! 👋 I'm your Skill GPS AI Career Mentor powered by Gemini AI. I have full context of your profile — your **${student.cgpa} CGPA**, **${student.leetcodeStreak}-day LeetCode streak**, and your goal to become a **${student.careerTarget}**. I can also tell you exactly which areas need improvement based on your skill gap data. What would you like help with today?`,
+            text: `Hello ${student.name.split(" ")[0]}! 👋 I'm your Skill GPS AI Career Mentor powered by Groq. I have full context of your profile — your **${student.cgpa} CGPA**, **${student.leetcodeStreak}-day LeetCode streak**, and your goal to become a **${student.careerTarget}**. I can also tell you exactly which areas need improvement based on your skill gap data. What would you like help with today?`,
             sender: "bot",
             timestamp: "Just now",
         }
@@ -104,7 +104,7 @@ export default function ChatPage() {
                         Personalised  <span style={{ fontStyle: "italic", color: "var(--accent)" }}>AI</span>
                     </h1>
                     <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.95rem" }}>
-                        Context-aware AI powered by Gemini 1.5 Flash — mapped directly to your Skill DNA.
+                        Context-aware AI powered by Groq Llama 3 — mapped directly to your Skill DNA.
                     </p>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>

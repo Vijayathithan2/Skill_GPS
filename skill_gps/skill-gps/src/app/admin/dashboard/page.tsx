@@ -13,7 +13,8 @@ import {
 import { 
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
     Tooltip, PieChart, Pie, Cell, AreaChart, Area, 
-    CartesianGrid, Legend
+    CartesianGrid, Legend, RadarChart, PolarGrid, 
+    PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
 
 type Certificate = {
@@ -72,6 +73,11 @@ export default function AdminDashboard() {
     const [addSuccess, setAddSuccess] = useState("");
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
     const [batchFilter, setBatchFilter] = useState<{ label: string; filter: (s: Student) => boolean } | null>(null);
+    
+    // Advanced Analytics State
+    const [riskStudents, setRiskStudents] = useState<any[]>([]);
+    const [overallDNA, setOverallDNA] = useState<any[]>([]);
+    const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
     const BATCH_DEFINITIONS = {
         academic: [
@@ -94,6 +100,29 @@ export default function AdminDashboard() {
 
     const [adminCollege, setAdminCollege] = useState("");
 
+    const fetchAdvancedAnalytics = useCallback(async (college: string) => {
+        try {
+            setAnalyticsLoading(true);
+            const [riskRes, dnaRes] = await Promise.all([
+                fetch(`/api/analytics/risk?college=${encodeURIComponent(college)}`),
+                fetch(`/api/analytics/overall-dna?college=${encodeURIComponent(college)}`)
+            ]);
+            
+            if (riskRes.ok) {
+                const riskData = await riskRes.json();
+                setRiskStudents(riskData.students);
+            }
+            if (dnaRes.ok) {
+                const dnaData = await dnaRes.json();
+                setOverallDNA(dnaData);
+            }
+        } catch (err) {
+            console.error("Advanced analytics error:", err);
+        } finally {
+            setAnalyticsLoading(false);
+        }
+    }, []);
+
     const fetchStudents = useCallback(async () => {
         try {
             const college = sessionStorage.getItem("adminCollege") || "";
@@ -102,12 +131,15 @@ export default function AdminDashboard() {
             if (!res.ok) throw new Error("Failed to fetch");
             const data = await res.json();
             setStudents(data);
+            
+            // Fetch advanced analytics too
+            fetchAdvancedAnalytics(college);
         } catch {
             setError("Could not load student data. Is the backend server running?");
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [fetchAdvancedAnalytics]);
 
     useEffect(() => {
         // Auth check
@@ -708,6 +740,94 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginBottom: 32 }}>
+                                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: 24, padding: 30, minHeight: 400 }}>
+                                    <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: 24, display: "flex", alignItems: "center", gap: 10 }}>
+                                        <Target size={18} color="#39d353" /> Institutional Skill DNA
+                                    </h3>
+                                    <div style={{ display: "flex", justifyContent: "center" }}>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={overallDNA}>
+                                                <PolarGrid stroke="rgba(255,255,255,0.1)" />
+                                                <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} />
+                                                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                                                <Radar name="Institution" dataKey="A" stroke="#39d353" fill="#39d353" fillOpacity={0.6} />
+                                                <Tooltip content={<CustomTooltip />} />
+                                            </RadarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+
+                                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: 24, padding: 30, minHeight: 400 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                                        <h3 style={{ fontSize: "1.1rem", fontWeight: 600, display: "flex", alignItems: "center", gap: 10 }}>
+                                            <AlertCircle size={18} color="#ef4444" /> Risk Assessment
+                                        </h3>
+                                        <span style={{ fontSize: "0.75rem", background: "rgba(239,68,68,0.1)", color: "#ef4444", padding: "4px 10px", borderRadius: 100, fontWeight: 700 }}>
+                                            {riskStudents.length} Students At Risk
+                                        </span>
+                                    </div>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 400, overflowY: "auto" }} className="custom-scrollbar">
+                                        {riskStudents.slice(0, 50).map((rs: any) => (
+                                            <div key={rs.id} style={{ background: "var(--bg-primary)", padding: "14px 18px", borderRadius: 12, border: "1px solid var(--border-color)" }}>
+                                                {/* Header Row */}
+                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>{rs.name}</div>
+                                                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 2 }}>
+                                                            {rs.department} · Year {rs.year} · {rs.riskFactors.join(", ")}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                                        <div style={{ fontSize: "0.85rem", fontWeight: 700, color: rs.cgpa < 5 ? "#ef4444" : "var(--text-primary)" }}>{rs.cgpa} GPA</div>
+                                                        <div style={{ fontSize: "0.75rem", color: rs.attendance < 75 ? "#ef4444" : "var(--text-muted)" }}>{rs.attendance}% Att.</div>
+                                                    </div>
+                                                </div>
+                                                {/* Assessment Marks Row */}
+                                                {rs.assessmentMarks && (
+                                                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                                                        {[
+                                                            { label: "Int-1", value: rs.assessmentMarks.internal1, max: 100 },
+                                                            { label: "Int-2", value: rs.assessmentMarks.internal2, max: 100 },
+                                                            { label: "Assign", value: rs.assessmentMarks.assignment, max: 100 },
+                                                            { label: "Lab", value: rs.assessmentMarks.lab, max: 100 },
+                                                            { label: "Seminar", value: rs.assessmentMarks.seminar, max: 100 },
+                                                        ].map((m, i) => (
+                                                            <div key={i} style={{
+                                                                background: m.value < 50 ? "rgba(239,68,68,0.1)" : "rgba(59,130,246,0.08)",
+                                                                border: `1px solid ${m.value < 50 ? "rgba(239,68,68,0.2)" : "rgba(59,130,246,0.15)"}`,
+                                                                padding: "4px 10px", borderRadius: 8, textAlign: "center"
+                                                            }}>
+                                                                <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginBottom: 2 }}>{m.label}</div>
+                                                                <div style={{ fontSize: "0.8rem", fontWeight: 700, color: m.value < 50 ? "#ef4444" : m.value >= 80 ? "#39d353" : "var(--text-primary)" }}>
+                                                                    {m.value ?? "—"}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                        {rs.avgInternal !== null && (
+                                                            <div style={{ background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.2)", padding: "4px 10px", borderRadius: 8, textAlign: "center" }}>
+                                                                <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginBottom: 2 }}>Avg</div>
+                                                                <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#A855F7" }}>{rs.avgInternal}</div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                        {riskStudents.length === 0 && !analyticsLoading && (
+                                            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>
+                                                ✅ No high-risk students identified.
+                                            </div>
+                                        )}
+                                        {riskStudents.length > 50 && (
+                                            <div style={{ textAlign: "center", padding: "12px", color: "var(--text-muted)", fontSize: "0.8rem", borderTop: "1px solid var(--border-light)", marginTop: 4 }}>
+                                                Showing top 50 of {riskStudents.length} at-risk students
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
                             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 32 }}>
                                 <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: 24, padding: 30 }}>
                                     <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: 24, display: "flex", alignItems: "center", gap: 10 }}>
@@ -751,7 +871,7 @@ export default function AdminDashboard() {
                                         <Zap size={24} color="#FFD700" />
                                     </div>
                                     <h4 style={{ fontSize: "1.2rem", fontWeight: 600, marginBottom: 8 }}>Placement Readiness</h4>
-                                    <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>72% of students are ready for early internships. Dept distribution shows strong performance in Technical Roles.</p>
+                                    <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>{Math.round(students.filter(s => s.careerProbability >= 70).length / (students.length || 1) * 100)}% of students are ready for early internships. Dept distribution shows strong performance in Technical Roles.</p>
                                 </div>
                             </div>
                         </>

@@ -44,7 +44,7 @@ export default function RoadmapPage() {
             const res = await fetch("/api/career-roadmap", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ currentSkills, targetRole }),
+                body: JSON.stringify({ currentSkills, targetRole, certificates: student.certificates }),
             });
 
             if (!res.ok) throw new Error("Failed to generate roadmap");
@@ -105,9 +105,14 @@ export default function RoadmapPage() {
                             <Sparkles size={18} /> {isLoading ? "Consulting AI..." : "Build Path"}
                         </button>
                     </div>
-                    <div style={{ padding: "8px 16px", borderRadius: "100px", background: "rgba(37, 99, 235, 0.1)", border: "1px solid rgba(37, 99, 235, 0.2)", display: "flex", alignItems: "center", gap: 8 }}>
-                        <Zap size={16} color="#3B82F6" />
-                        <span style={{ fontSize: "0.9rem", color: "var(--text-primary)", fontWeight: 600 }}>{student.totalXP.toLocaleString()} Total XP</span>
+                    <div style={{ display: "flex", gap: 12 }}>
+                        <a href="/dashboard/certifications" style={{ textDecoration: "none", padding: "8px 16px", borderRadius: "100px", background: "rgba(168, 192, 255, 0.1)", border: "1px solid rgba(168, 192, 255, 0.2)", display: "flex", alignItems: "center", gap: 8, color: "#A8C0FF", fontSize: "0.85rem", fontWeight: 600 }}>
+                            <CheckCircle size={14} /> Upload Certs to Sync Progress
+                        </a>
+                        <div style={{ padding: "8px 16px", borderRadius: "100px", background: "rgba(37, 99, 235, 0.1)", border: "1px solid rgba(37, 99, 235, 0.2)", display: "flex", alignItems: "center", gap: 8 }}>
+                            <Zap size={16} color="#3B82F6" />
+                            <span style={{ fontSize: "0.9rem", color: "var(--text-primary)", fontWeight: 600 }}>{student.totalXP.toLocaleString()} Total XP</span>
+                        </div>
                     </div>
                 </div>
             </div>

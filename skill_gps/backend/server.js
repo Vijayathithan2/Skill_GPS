@@ -402,14 +402,88 @@ app.post('/api/mentor-guide', async (req, res) => {
     }
 });
 
-// ===== INSIGHTS (Groq + JSON Mode) =====
-app.post('/api/insights', async (req, res) => {
-    const { studentId } = req.body;
+// ===== ADVANCED ANALYTICS (Admin Only) =====
+
+// Get students at risk (Low CGPA < 5, Low Attendance < 75%, or No Activity)
+app.get('/api/analytics/risk', (req, res) => {
+    const { college } = req.query;
+    let students = readStudents();
+    
+    if (college && college !== 'admin') {
+        students = students.filter(s => s.college.toLowerCase().includes(college.toLowerCase()));
+    }
+
+    const riskStudents = students.filter(s => 
+        (s.cgpa < 5) || 
+        (s.attendance < 75)
+    ).map(s => {
+        const marks = s.assessmentMarks || {};
+        const avgInternal = marks.internal1 && marks.internal2
+            ? Math.round((marks.internal1 + marks.internal2) / 2)
+            : null;
+        return {
+            id: s.id,
+            name: s.name,
+            email: s.email,
+            department: s.department,
+            year: s.year,
+            cgpa: s.cgpa,
+            attendance: s.attendance,
+            assessmentMarks: marks,
+            avgInternal,
+            riskFactors: [
+                ...(s.cgpa < 5 ? ['Low CGPA'] : []),
+                ...(s.attendance < 75 ? ['Low Attendance'] : [])
+            ]
+        };
+    });
+
+    res.json({
+        totalAtRisk: riskStudents.length,
+        students: riskStudents
+    });
+});
+
+// Get Institution-wide Skill DNA (Aggregated Radar Data)
+app.get('/api/analytics/overall-dna', (req, res) => {
+    const { college, department } = req.query;
+    let students = readStudents();
+
+    if (college && college !== 'admin') {
+        students = students.filter(s => s.college.toLowerCase().includes(college.toLowerCase()));
+    }
+    if (department) {
+        students = students.filter(s => s.department === department);
+    }
+
+    const skillTotals = {};
+    const skillCounts = {};
+
+    students.forEach(s => {
+        (s.skillGaps || []).forEach(gap => {
+            skillTotals[gap.skill] = (skillTotals[gap.skill] || 0) + gap.score;
+            skillCounts[gap.skill] = (skillCounts[gap.skill] || 0) + 1;
+        });
+    });
+
+    const dna = Object.keys(skillTotals).map(skill => ({
+        subject: skill,
+        A: Math.round(skillTotals[skill] / skillCounts[skill]),
+        fullMark: 100
+    })).sort((a, b) => b.A - a.A).slice(0, 6);
+
+    res.json(dna);
+});
+
+// Update the POST /api/insights to also support GET (for frontend convenience)
+app.get('/api/insights/:studentId', async (req, res) => {
+    const { studentId } = req.params;
     const students = readStudents();
-    const student = students.find(s => s.id === studentId) || students[0];
+    const student = students.find(s => s.id === studentId);
+
+    if (!student) return res.status(404).json({ error: 'Student not found' });
 
     const systemPrompt = `You are an AI academic insights engine. Analyze the student's data and return actionable insights.
-
 Return a valid JSON object with EXACTLY this structure:
 {
   "summary": "2-sentence overview of the student's current standing",
@@ -422,14 +496,11 @@ Return a valid JSON object with EXACTLY this structure:
   "motivationalNote": "A personalized motivational message"
 }`;
 
-    const userMessage = `Student Data: ${JSON.stringify(student)}`;
-
     try {
-        const reply = await callGroq(systemPrompt, [{ role: 'user', content: userMessage }], false, true);
+        const reply = await callGroq(systemPrompt, [{ role: 'user', content: `Student Data: ${JSON.stringify(student)}` }], false, true);
         const parsed = JSON.parse(reply);
         res.json(parsed);
     } catch (error) {
-        console.error('Insights error:', error.message);
         res.status(500).json({ error: 'Failed to generate insights.' });
     }
 });

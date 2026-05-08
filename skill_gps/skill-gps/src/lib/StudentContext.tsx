@@ -54,7 +54,7 @@ export function StudentProvider({ children }: { children: ReactNode }) {
         let unsubscribeDB: () => void = () => {};
 
         const init = async () => {
-            const savedId = localStorage.getItem("skillgps_student_id") || "STU001";
+            const savedId = localStorage.getItem("skillgps_student_id") || "STU0001";
             const nodeSuccess = await fetchFromNode(savedId);
             
             if (nodeSuccess) {

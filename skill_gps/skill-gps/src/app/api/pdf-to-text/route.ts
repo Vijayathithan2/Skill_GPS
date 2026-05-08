@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
 
 export async function POST(req: NextRequest) {
     try {
@@ -11,9 +10,10 @@ export async function POST(req: NextRequest) {
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
-        const parser = new PDFParse({ data: buffer });
-        const data = await parser.getText();
-        await parser.destroy();
+        
+        // Use require to bypass Turbopack's ESM resolution issues
+        const pdfParse = require("pdf-parse");
+        const data = await pdfParse(buffer);
 
         return NextResponse.json({ text: data.text });
     } catch (error: any) {

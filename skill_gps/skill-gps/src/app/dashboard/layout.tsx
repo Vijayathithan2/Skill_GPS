@@ -14,7 +14,7 @@ const NAV_ITEMS = [
     { id: "assessments", path: "/dashboard/assessments", icon: <LineChart size={20} strokeWidth={1.5} />, label: "Assessments" },
     { id: "projects", path: "/dashboard/projects", icon: <Bot size={20} strokeWidth={1.5} />, label: "Projects & Hackathons" },
     { id: "aptitude-trainer", path: "/dashboard/aptitude-trainer", icon: <BrainCircuit size={20} strokeWidth={1.5} />, label: "Aptitude Trainer" },
-    { id: "resume", path: "/dashboard/resume", icon: <AlertCircle size={20} strokeWidth={1.5} />, label: "Resume Optimizer" },
+    { id: "resume", path: "/dashboard/resume", icon: <FileText size={20} strokeWidth={1.5} />, label: "AI Resume Builder" },
     { id: "mentor", path: "/dashboard/mentor", icon: <FileText size={20} strokeWidth={1.5} />, label: "Mentor Guide" },
     { id: "chat", path: "/dashboard/chat", icon: <Bot size={20} strokeWidth={1.5} />, label: "Chat with AI" },
     { id: "connect", path: "/dashboard/connect", icon: <Fingerprint size={20} strokeWidth={1.5} />, label: "Alumni & Connect" },

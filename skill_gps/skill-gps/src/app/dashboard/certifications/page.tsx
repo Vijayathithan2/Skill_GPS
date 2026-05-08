@@ -18,6 +18,37 @@ export default function CertificationsPage() {
     const [title, setTitle] = useState("");
     const [issuer, setIssuer] = useState("");
     const [date, setDate] = useState("");
+    const [recommendedCerts, setRecommendedCerts] = useState<any[]>([]);
+    const [loadingRecs, setLoadingRecs] = useState(false);
+
+    useEffect(() => {
+        if (!student.careerTarget) return;
+        const fetchRecs = async () => {
+            setLoadingRecs(true);
+            try {
+                const currentSkills = (student.skillGaps || []).map((s: any) => s.skill).join(", ");
+                const res = await fetch("/api/cert-recommendations", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ 
+                        targetRole: student.careerTarget, 
+                        skillGaps: currentSkills,
+                        department: student.department || student.college,
+                        year: student.year
+                    })
+                });
+                const data = await res.json();
+                if (data.recommendations) {
+                    setRecommendedCerts(data.recommendations);
+                }
+            } catch (error) {
+                console.error("Failed to fetch recommendations:", error);
+            } finally {
+                setLoadingRecs(false);
+            }
+        };
+        fetchRecs();
+    }, [student.careerTarget, student.skillGaps]);
 
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -43,16 +74,22 @@ export default function CertificationsPage() {
                 createdAt: new Date().toISOString()
             };
 
-            // 3. Update Firestore
-            const studentRef = doc(db, "students", student.id);
-            await updateDoc(studentRef, {
-                certificates: arrayUnion(newCert)
+            // 3. Update Node.js Backend instead of Firestore
+            const updatedCertificates = [...(student.certificates || []), newCert];
+            const res = await fetch(`http://localhost:5000/api/students/${student.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ certificates: updatedCertificates })
             });
+
+            if (!res.ok) {
+                throw new Error("Failed to save certificate to backend");
+            }
 
             // 4. Update Local State
             setStudent({
                 ...student,
-                certificates: [...(student.certificates || []), newCert]
+                certificates: updatedCertificates
             });
 
             // Reset Form and State
@@ -164,6 +201,35 @@ export default function CertificationsPage() {
                             </div>
                         </div>
                     ))
+                )}
+            </div>
+
+            {/* Recommended Certifications Section */}
+            <div style={{ marginTop: 60, marginBottom: 40 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+                    <ShieldCheck size={24} color="#A8C0FF" />
+                    <h2 style={{ fontSize: "1.5rem", fontWeight: 600, color: "var(--text-primary)" }}>
+                        Recommended for <span style={{ color: "var(--accent)" }}>{student.careerTarget}</span>
+                    </h2>
+                </div>
+                {loadingRecs ? (
+                    <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Analyzing skill gaps and parsing recommendations...</div>
+                ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
+                        {recommendedCerts.map((cert, idx) => (
+                            <div key={idx} style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", padding: 24, borderRadius: 20, display: "flex", flexDirection: "column", gap: 12 }} className="hover-scale">
+                                <h3 style={{ fontSize: "1.1rem", fontWeight: 600, color: "var(--text-primary)" }}>{cert.title}</h3>
+                                <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
+                                    <span>{cert.issuer}</span>
+                                    <span style={{ color: "var(--accent)" }}>{cert.difficulty} • {cert.estimatedHours}</span>
+                                </div>
+                                <div style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "8px 0" }} />
+                                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: 1.5, margin: 0 }}>
+                                    "{cert.why}"
+                                </p>
+                            </div>
+                        ))}
+                    </div>
                 )}
             </div>
 
