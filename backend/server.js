@@ -32,7 +32,7 @@ async function callGroq(systemPrompt, messages, _unused = false, jsonMode = fals
     ];
 
     const requestBody = {
-        model: 'llama3-8b-8192',
+        model: 'llama-3.3-70b-versatile',
         messages: formattedMessages,
         temperature: 0.7,
         max_tokens: 2048,
@@ -511,7 +511,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok',
         timestamp: new Date().toISOString(),
         ai: 'Groq',
-        model: 'llama3-8b-8192',
+        model: 'llama-3.3-70b-versatile',
         groq_key_set: !!process.env.GROQ_API_KEY
     });
 });
