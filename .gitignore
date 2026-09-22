@@ -1,5 +1,29 @@
+# Dependencies
+node_modules/
+**/node_modules/
 
-# Environment variables
+# Environment variables & secrets (NEVER COMMIT)
 .env
-.env.local
+.env.*
 *.env
+!.env.example
+frontend/.env.local
+backend/.env
+
+# Build outputs
+.next/
+**/dist/
+**/build/
+out/
+
+# Logs & temp files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lint.txt
+lint-errors*.json
+**/lint-errors*.json
+**/lint.txt
+**/test_upload.js
+.DS_Store
