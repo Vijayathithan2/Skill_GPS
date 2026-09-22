@@ -35,16 +35,18 @@ export default function RoadmapPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
     const [customRole, setCustomRole] = useState("");
+    const [hasAttempted, setHasAttempted] = useState(false);
 
     const handleGenerate = async (targetRole: string) => {
         setIsLoading(true);
         setError("");
+        setHasAttempted(true);
         try {
-            const currentSkills = student.skillGaps.map((s: any) => s.skill).join(", ") || "Basics";
+            const currentSkills = (student.skillGaps || []).map((s: any) => s.skill).join(", ") || "Basics";
             const res = await fetch("/api/career-roadmap", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ currentSkills, targetRole, certificates: student.certificates }),
+                body: JSON.stringify({ currentSkills, targetRole, certificates: student.certificates || [] }),
             });
 
             if (!res.ok) throw new Error("Failed to generate roadmap");
@@ -58,10 +60,10 @@ export default function RoadmapPage() {
     };
 
     useEffect(() => {
-        if (!roadmapData && student.careerTarget && !isLoading) {
+        if (!roadmapData && student.careerTarget && !isLoading && !hasAttempted) {
             handleGenerate(student.careerTarget);
         }
-    }, [student.careerTarget, roadmapData, isLoading]);
+    }, [student.careerTarget, roadmapData, isLoading, hasAttempted]);
 
     const nodes = roadmapData?.nodes || ROADMAP_NODES;
 
